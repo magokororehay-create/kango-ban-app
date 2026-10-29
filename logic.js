@@ -107,6 +107,51 @@ function itemsFor(state, date) {
   return { placed: placed, tray: tray, off: off, skip: skip, paused: paused, lanes: lanes, wk: wk, dow: dow };
 }
 
+// 週の一覧で、カードを別の日（曜日）の列へ移す。元の state は変えず、移した後の state を返す。
+// weekly＝毎週の型ごと曜日を変える。そうでなければその週だけ：元の日は「M/D（曜）へ移動」で休みにし、先の日に追加する。
+// 追加・予定は日付ごと移す。特指示は日ごとのものなので、日をまたいでは動かせない。addId は新しい追加のID。
+function moveToDay(state, fromDate, key, toDate, lane, start, weekly, addId) {
+  var s = JSON.parse(JSON.stringify(state));
+  var kind = key.charAt(0), id = key.slice(2);
+  var dayOf = function (d) { return s.days[d] || (s.days[d] = {}); };
+  var setMove = function (d, k, v) { var o = dayOf(d); (o.moves || (o.moves = {}))[k] = v; };
+  var curMove = (state.days[fromDate] && state.days[fromDate].moves && state.days[fromDate].moves[key]) || null;
+  if (kind === 'e') {
+    var ev = s.events.filter(function (e) { return e.id === id; })[0];
+    if (!ev) return { state: state, error: '予定が見つかりません' };
+    ev.date = toDate; ev.lane = lane; ev.start = start;
+    return { state: s };
+  }
+  if (kind === 'a') {
+    var fromAdds = dayOf(fromDate).adds || [];
+    var a = fromAdds.filter(function (x) { return x.id === id; })[0];
+    if (!a) return { state: state, error: 'その日の追加が見つかりません' };
+    dayOf(fromDate).adds = fromAdds.filter(function (x) { return x.id !== id; });
+    a.lane = lane; a.start = start;
+    (dayOf(toDate).adds || (dayOf(toDate).adds = [])).push(a);
+    return { state: s };
+  }
+  if (kind === 'p') {
+    if (fromDate !== toDate) return { state: state, error: '特指示は日ごとに入れるので、曜日をまたいでは動かせません（その日の盤面で動かしてください）' };
+    var c = s.clients.filter(function (x) { return x.id === id; })[0];
+    setMove(fromDate, key, { lane: lane, start: start, min: curMove && curMove.min ? curMove.min : c.sp.min });
+    return { state: s };
+  }
+  if (kind !== 's') return { state: state, error: 'このカードは週の一覧からは動かせません' };
+  var slot = s.slots.filter(function (x) { return x.id === id; })[0];
+  if (!slot) return { state: state, error: '枠が見つかりません' };
+  var min = curMove && curMove.min ? curMove.min : slot.min;
+  if (weekly) {
+    slot.dow = dowOf(toDate); slot.lane = lane; slot.start = start;
+    if (s.days[fromDate] && s.days[fromDate].moves) delete s.days[fromDate].moves[key];
+    return { state: s };
+  }
+  if (fromDate === toDate) { setMove(fromDate, key, { lane: lane, start: start, min: min }); return { state: s }; }
+  setMove(fromDate, key, { off: 1, reason: md_(toDate) + '（' + DOWS[dowOf(toDate)] + '）へ移動' });
+  (dayOf(toDate).adds || (dayOf(toDate).adds = [])).push({ id: addId, clientId: slot.clientId, lane: lane, start: start, min: min });
+  return { state: s };
+}
+
 // 同じ列で時間が重なれば両方に bad、前の訪問との間が gapWarn 分より短ければ warn。
 function conflicts(placed, lanes, gapWarn) {
   lanes.forEach(function (L) {
@@ -368,5 +413,5 @@ function summarizeDiff(before, after) {
   return { clients: count(before.clients, after.clients), slots: count(before.slots, after.slots), dayChanges: dayChanges, events: count(before.events, after.events) };
 }
 
-  return { T0: T0, T1: T1, LUNCH: LUNCH, DOWS: DOWS, TABS: TABS, parseHm: parseHm, fmtHm: fmtHm, normDate: normDate, dowOf: dowOf, weekOfMonth: weekOfMonth, itemsFor: itemsFor, conflicts: conflicts, freeSlots: freeSlots, normalizeState: normalizeState, validateState: validateState, stateToTables: stateToTables, stateFromTables: stateFromTables, summarizeDiff: summarizeDiff };
+  return { T0: T0, T1: T1, LUNCH: LUNCH, DOWS: DOWS, TABS: TABS, parseHm: parseHm, fmtHm: fmtHm, normDate: normDate, dowOf: dowOf, weekOfMonth: weekOfMonth, itemsFor: itemsFor, conflicts: conflicts, freeSlots: freeSlots, moveToDay: moveToDay, normalizeState: normalizeState, validateState: validateState, stateToTables: stateToTables, stateFromTables: stateFromTables, summarizeDiff: summarizeDiff };
 })();

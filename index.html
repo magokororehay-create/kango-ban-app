@@ -121,6 +121,7 @@ ul.plain li{display:flex;justify-content:space-between;gap:6px;align-items:cente
 .wgrid{display:grid;grid-template-columns:repeat(var(--wn),minmax(0,1fr))}
 .wgrid .lane{min-width:0}
 .wcard{position:absolute;left:2px;right:2px;border-radius:5px;border:1px solid;padding:1px 3px;letter-spacing:-.02em;font-size:11px;line-height:1.25;overflow:hidden;cursor:pointer;z-index:1}
+.admin .wcard{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .wcard .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wcard .wkb{padding:0 3px}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(410px,100%);background:var(--panel);border-left:1px solid var(--line);z-index:50;overflow:auto;overflow-x:hidden;
@@ -223,6 +224,7 @@ ul.plain li{display:flex;justify-content:space-between;gap:6px;align-items:cente
       <span>カードを動かす：ドラッグ（10分刻み）</span>
       <span>カードを押す：時間・週の決まり・特指示を直す</span>
       <span>未配置のカードを押す：空いている所を点線で表示</span>
+      <span>週の一覧でも、カードを別の曜日の列へドラッグできます（「毎週の型」なら曜日ごと、「この日だけ」ならその週だけ）</span>
       <span>動かしただけでは保存されません。「まとめて確定」で保存します</span>
     </div>
   </div>
@@ -454,9 +456,9 @@ function renderWeek() {
     const lanes = r.lanes.map((L) => {
       const cards = r.placed.filter((i) => i.lane === L).map((it) => {
         const nm = nameOf(it);
-        return `<div class="wcard ${typeCls(it)}${it.bad ? ' bad' : ''}" data-go="${esc(date)}" title="${esc(nm)} ${hm(it.start)}〜${hm(it.start + it.min)}（${it.min}分）" style="top:${(it.start - T0) * PX}px;height:${it.min * PX - 2}px"><div class="nm">${esc(nm)}</div>${weekBadge(it)}</div>`;
+        return `<div class="wcard ${typeCls(it)}${it.bad ? ' bad' : ''}" data-go="${esc(date)}" data-wkey="${esc(it.key)}" title="${esc(nm)} ${hm(it.start)}〜${hm(it.start + it.min)}（${it.min}分）" style="top:${(it.start - T0) * PX}px;height:${it.min * PX - 2}px"><div class="nm">${esc(nm)}</div>${weekBadge(it)}</div>`;
       }).join('');
-      return `<div class="lane"><div class="lunch" style="top:${(LUNCH[0] - T0) * PX}px;height:${(LUNCH[1] - LUNCH[0]) * PX}px"></div>${cards}</div>`;
+      return `<div class="lane" data-lane="${esc(L)}" data-date="${esc(date)}"><div class="lunch" style="top:${(LUNCH[0] - T0) * PX}px;height:${(LUNCH[1] - LUNCH[0]) * PX}px"></div>${cards}</div>`;
     }).join('');
     h += `<div class="wday${date === cur ? ' cur' : ''}" style="--wn:${r.lanes.length}">
       <button class="whead" data-go="${esc(date)}" title="この日の盤面を開く"><b>${dd.getMonth() + 1}/${dd.getDate()}（${DOW[dd.getDay()]}）<span class="wk">第${r.wk}週</span></b>
@@ -484,6 +486,20 @@ function applyPlace(it, lane, start) {
   }
   pick = null; render(); if (drawerRef) buildDrawer();
 }
+// 週の一覧で別の日（曜日）へ移す。「毎週の型」なら曜日そのものを、「この日だけ」ならその週だけを変える。
+let suppressWeekClick = false;
+function applyWeekMove(it, from, to, lane, start) {
+  if (!ADMIN) return;
+  const name = nameOf(it), weekly = mode === 'week';
+  const r = K.moveToDay(S, from, it.key, to, lane, start, weekly, newId('a'));
+  if (r.error) { toast(r.error); render(); return; }
+  snap(); S = r.state; render();
+  const toDow = DOW[parse(to).getDay()];
+  if (from === to) toast(`${md(from)}だけ：${name} を ${lane}列 ${hm(start)} に`);
+  else if (weekly && it.kind === 's') toast(`毎週の型：${name} を 毎週${toDow}曜 ${lane}列 ${hm(start)} に`);
+  else toast(`${name} を ${md(from)} から ${md(to)}（${toDow}）${lane}列 ${hm(start)} へ（その週だけ）`);
+}
+
 function toTray(it) {
   if (!ADMIN || it.kind === 'u') return;
   snap();
@@ -508,6 +524,13 @@ async function commit() {
 let drag = null;
 document.addEventListener('pointerdown', (e) => {
   if (e.button > 0 || e.target.closest('button,select,input')) return;
+  const wc = ADMIN && e.target.closest('.wcard[data-wkey]');
+  if (wc) {   // 週の一覧のカード：別の日（曜日）の列へ動かせる
+    const wit = K.itemsFor(S, wc.dataset.go).placed.find((i) => i.key === wc.dataset.wkey); if (!wit) return;
+    const wr = wc.getBoundingClientRect();
+    drag = { it: wit, el: wc, week: true, from: wc.dataset.go, x0: e.clientX, y0: e.clientY, dx: e.clientX - wr.left, dy: e.clientY - wr.top, w: wr.width, moved: false, inTray: false, pid: e.pointerId };
+    return;
+  }
   const el = e.target.closest('.card[data-key]'); if (!el) return;
   const it = findItem(el.dataset.key); if (!it) return;
   const r = el.getBoundingClientRect();
@@ -523,16 +546,16 @@ document.addEventListener('pointermove', (e) => {
   e.preventDefault();
   drag.g.style.transform = `translate(${e.clientX - drag.dx}px,${e.clientY - Math.min(drag.dy, 14)}px)`;
   document.querySelectorAll('.lane.over,.tray.over').forEach((x) => x.classList.remove('over'));
-  board.querySelector('.preview')?.remove(); drag.target = null;
+  document.querySelectorAll('.preview').forEach((x) => x.remove()); drag.target = null;
   const under = document.elementFromPoint(e.clientX, e.clientY);
-  const lane = under && under.closest('#board .lane'), tr = under && under.closest('.tray');
+  const lane = under && under.closest(drag.week ? '#weekview .lane[data-date]' : '#board .lane'), tr = !drag.week && under && under.closest('.tray');
   if (lane) {
     const rr = lane.getBoundingClientRect(); let m = T0 + snap10((e.clientY - Math.min(drag.dy, 14) - rr.top) / PX);
     m = Math.max(T0, Math.min(T1 - drag.it.min, m));
     lane.classList.add('over');
     const p = document.createElement('div'); p.className = 'preview'; p.style.top = ((m - T0) * PX) + 'px'; p.style.height = (drag.it.min * PX - 2) + 'px';
     p.textContent = `${hm(m)}〜${hm(m + drag.it.min)}`; lane.appendChild(p);
-    drag.target = { lane: lane.dataset.lane, start: m };
+    drag.target = { lane: lane.dataset.lane, start: m, date: lane.dataset.date };
   } else if (tr && !drag.inTray) { tr.classList.add('over'); drag.target = { tray: true }; }
 }, { passive: false });
 document.addEventListener('pointerup', (e) => {
@@ -540,6 +563,12 @@ document.addEventListener('pointerup', (e) => {
   const d = drag; drag = null;
   if (d.g) d.g.remove();
   document.querySelectorAll('.lane.over,.tray.over').forEach((x) => x.classList.remove('over'));
+  if (d.week) {   // 動かしていなければ、ふつうのクリック（その日の盤面を開く）に任せる
+    if (!d.moved) return;
+    suppressWeekClick = true; setTimeout(() => { suppressWeekClick = false; }, 0);
+    if (d.target && d.target.lane) applyWeekMove(d.it, d.from, d.target.date, d.target.lane, d.target.start); else render();
+    return;
+  }
   if (!d.moved) {
     if (d.inTray && ADMIN) { pick = pick === d.it.key ? null : d.it.key; render(); }
     else openDrawer(d.it);
@@ -768,7 +797,7 @@ $('#reload').onclick = async () => {
   if (await loadBoard(false)) toast('最新にしました');
 };
 $('#logout').onclick = async () => { await api({ action: 'logout', token: lsGet(LS.token) }); lsSet(LS.token, null); S = null; showLogin(''); };
-$('#weekview').addEventListener('click', (e) => { const g = e.target.closest('[data-go]'); if (!g) return; cur = g.dataset.go; view = 'board'; pick = null; render(); $('#boardwrap').scrollIntoView({ block: 'start' }); });
+$('#weekview').addEventListener('click', (e) => { if (suppressWeekClick) return; const g = e.target.closest('[data-go]'); if (!g) return; cur = g.dataset.go; view = 'board'; pick = null; render(); $('#boardwrap').scrollIntoView({ block: 'start' }); });
 $('#copyPrev').onclick = () => {
   const p = ds(addDays(parse(cur), -7)), src = S.days[p];
   if (!src || (!src.staff && !src.lanes)) { toast(`${md(p)}に列と担当の記録がありません`); return; }
