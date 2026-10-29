@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>看護 訪問スケジュール盤</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap">
+<style>
+/* 盤面：ツールバー → 時刻の盤面（列＝A/B/C…のコース）＋ 未配置トレイ。色はライトモードだけ。 */
+:root{
+  color-scheme:light;
+  --bg:#F3F7F6;--panel:#FFFFFF;--line:#D6E0DE;--line2:#E8EFED;--ink:#1D2826;--ink2:#566461;
+  --accent:#00897D;--accent-ink:#FFFFFF;--accent-soft:#DCF2EF;
+  --k-bg:#DBEDFA;--k-bd:#86B6DC;--k-ink:#174A6E;
+  --i-bg:#E0F0D5;--i-bd:#8CBE6A;--i-ink:#2C5614;
+  --n-bg:#FFF16E;--n-bd:#D2B900;--n-ink:#4A4000;
+  --m-bg:#FFFAD9;--m-bd:#E3D58F;--m-ink:#5E5215;
+  --danger:#C62F2F;--danger-soft:#FBE3E3;--warn:#B87400;--lunch:#EDF2F1;
+  --f:"BIZ UDPGothic","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 40px;font-variant-numeric:tabular-nums}
+h1{font-size:19px;margin:0;font-weight:700}
+h3{font-size:14px;margin:0 0 8px;font-weight:700}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:focus-visible,select:focus-visible,input:focus-visible,.card:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+select,input{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px}
+.note{font-size:12px;color:var(--ink2)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.dlabel{font-size:18px;font-weight:700;min-width:11em}
+.wk{display:inline-block;background:var(--accent);color:var(--accent-ink);border-radius:5px;padding:0 7px;font-size:13px;margin-left:4px;vertical-align:2px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:var(--panel)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12px;border-radius:999px;padding:2px 10px;border:1px solid var(--line);background:var(--panel)}
+.chip.bad{border-color:var(--danger);color:var(--danger);background:var(--danger-soft)}
+.chip.warn{border-color:var(--warn);color:var(--warn)}
+.dirty{display:flex;gap:8px;align-items:center;background:var(--n-bg);border:1px solid var(--n-bd);color:var(--n-ink);border-radius:8px;padding:4px 6px 4px 12px;font-weight:700}
+.modehint{font-size:12px;color:var(--ink2)}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:12px;margin-top:10px;align-items:start}
+.main.wide{grid-template-columns:minmax(0,1fr)}
+@media (max-width:880px){.main{grid-template-columns:minmax(0,1fr)}}
+.boardwrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 8px 10px}
+.board{display:grid;grid-template-columns:44px repeat(var(--n),minmax(124px,1fr)) 58px;min-width:calc(102px + var(--n) * 124px)}
+.lh{padding:4px 4px 6px;border-left:1px solid var(--line);display:flex;flex-direction:column;gap:4px}
+.lh .lt{display:flex;align-items:center;justify-content:space-between;font-weight:700}
+.lh .x{padding:0 7px;font-size:12px;color:var(--ink2)}
+.lh select{width:100%}
+.lh select.dup{border-color:var(--danger);color:var(--danger)}
+.lh .who{font-size:13px}
+.lh .cnt{font-size:11px;color:var(--ink2)}
+.band{grid-column:1/-1;display:flex;gap:16px;font-size:12px;padding:3px 8px;margin-bottom:4px;border-radius:6px;background:var(--m-bg);color:var(--m-ink)}
+.tcol{position:relative;height:var(--H)}
+.tcol span{position:absolute;right:6px;font-size:11px;color:var(--ink2);transform:translateY(-50%)}
+.tcol span.h{color:var(--ink);font-weight:700}
+.lane{position:relative;height:var(--H);border-left:1px solid var(--line);
+  background-image:repeating-linear-gradient(to bottom,var(--line) 0 1px,transparent 1px var(--hour)),repeating-linear-gradient(to bottom,var(--line2) 0 1px,transparent 1px var(--half))}
+.lane.over{background-color:var(--accent-soft)}
+.lunch{position:absolute;left:0;right:0;background:var(--lunch);opacity:.85;font-size:11px;color:var(--ink2);text-align:center;padding-top:2px}
+.card{position:absolute;left:3px;right:3px;border-radius:6px;border:1px solid;padding:2px 6px;font-size:12px;line-height:1.28;overflow:hidden;cursor:pointer;user-select:none;-webkit-user-select:none;z-index:1}
+.admin .card{cursor:grab;touch-action:none}
+.card .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .sub{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.k{background:var(--k-bg);border-color:var(--k-bd);color:var(--k-ink)}
+.i{background:var(--i-bg);border-color:var(--i-bd);color:var(--i-ink)}
+.n{background:var(--n-bg);border-color:var(--n-bd);color:var(--n-ink)}
+.m{background:var(--m-bg);border-color:var(--m-bd);color:var(--m-ink);border-style:dashed}
+.card.bad,.wcard.bad{outline:2px solid var(--danger);outline-offset:-1px}
+.card.warn{outline:2px dashed var(--warn);outline-offset:-1px}
+.card.picked{outline:2px solid var(--accent);outline-offset:1px}
+.flag{font-weight:700}
+.flag.bad{color:var(--danger)}.flag.warn{color:var(--warn)}
+.wkb{display:inline-block;margin-right:4px;font-size:11px;font-weight:700;line-height:1.25;padding:0 4px;border-radius:4px;border:1.5px solid currentColor;background:var(--panel);white-space:nowrap}
+.ghost{position:absolute;left:3px;right:3px;border:2px dashed var(--accent);border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:11px;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 2px}
+.preview{position:absolute;left:3px;right:3px;border:2px dashed var(--accent);border-radius:6px;z-index:3;pointer-events:none;font-size:11px;color:var(--accent);padding:1px 5px;font-weight:700;background:rgba(220,242,239,.6)}
+.dragging{position:fixed;pointer-events:none;z-index:60;opacity:.92;box-shadow:0 8px 20px rgba(0,0,0,.2);left:0;top:0}
+.addcol{border-left:1px solid var(--line);display:flex;align-items:flex-start;justify-content:center;padding-top:4px}
+.tray{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:10px}
+.tray.over{outline:2px dashed var(--accent)}
+.tray .card{position:relative;left:auto;right:auto;height:auto;padding:4px 8px}
+.tray .list{display:flex;flex-direction:column;gap:6px;min-height:40px}
+.tray .why{font-size:11px}
+.tray .more{float:right;font-size:11px;padding:0 6px;margin-left:4px}
+.linkish{border:0;background:none;padding:0;font-weight:700;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.empty{font-size:12px;color:var(--ink2);border:1px dashed var(--line);border-radius:6px;padding:8px;text-align:center}
+.small{font-size:12px;color:var(--ink2)}
+.rowf{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.form{border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.form input[type=text]{width:100%}
+ul.plain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:12px}
+ul.plain li{display:flex;justify-content:space-between;gap:6px;align-items:center}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--ink2);margin-top:8px}
+.sw{display:inline-block;width:14px;height:11px;border-radius:3px;border:1px solid;vertical-align:-1px;margin-right:4px}
+.listview{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.lv{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
+.lv.mine{border:2px solid var(--accent)}
+.lv h3{display:flex;justify-content:space-between}
+.lv ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.lv li > span:first-child{white-space:nowrap}
+.lv li{display:grid;grid-template-columns:auto 1fr;gap:6px;font-size:14px;border-radius:6px;padding:4px 6px;border:1px solid}
+.week{display:flex;gap:6px;overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px}
+.wtime{flex:0 0 40px}
+.wday{flex:1 0 calc(var(--wn) * 80px);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.wday.cur{border-color:var(--accent)}
+.whead{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;width:100%;height:50px;border:0;border-radius:0;background:var(--line2);padding:3px 6px;text-align:left}
+.wtime .whead{background:none}
+.whead .wk{margin-left:0;font-size:11px}
+.wlh{display:grid;grid-template-columns:repeat(var(--wn),minmax(0,1fr));height:20px;font-size:11px;color:var(--ink2)}
+.wtime .wlh{display:block}
+.wlh span{border-left:1px solid var(--line);padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wgrid{display:grid;grid-template-columns:repeat(var(--wn),minmax(0,1fr))}
+.wgrid .lane{min-width:0}
+.wcard{position:absolute;left:2px;right:2px;border-radius:5px;border:1px solid;padding:1px 3px;letter-spacing:-.02em;font-size:11px;line-height:1.25;overflow:hidden;cursor:pointer;z-index:1}
+.wcard .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wcard .wkb{padding:0 3px}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(410px,100%);background:var(--panel);border-left:1px solid var(--line);z-index:50;overflow:auto;overflow-x:hidden;
+  padding:calc(14px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) 16px;box-shadow:-10px 0 28px rgba(0,0,0,.14)}
+.drawer section{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.dh h2{font-size:18px;margin:4px 0 0;font-weight:700}
+.pill{display:inline-block;font-size:12px;border-radius:5px;padding:1px 8px;border:1px solid}
+.slot{border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.slot label{font-size:12px;white-space:nowrap}
+.slot label.blk{display:flex;flex-direction:column;gap:2px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:13px;z-index:70;max-width:calc(100% - 32px)}
+.help{font-size:12px;color:var(--ink2);margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 16px}
+.login{max-width:340px;margin:12vh auto 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px}
+.login input{font-size:20px;letter-spacing:.3em;text-align:center;padding:8px}
+.err{color:var(--danger);font-size:13px}
+.printtitle{display:none}
+@media (prefers-reduced-motion:no-preference){.card{transition:box-shadow .12s}}
+@page{size:A4 landscape;margin:8mm}
+@media print{
+  body{background:#fff;padding:0}
+  .top,.bar,.tray,.legend,.help,.drawer,.toast,.lh .x,#addLane,.ghost,.dirty{display:none!important}
+  .printtitle{display:block;font-size:16px;font-weight:700;margin:0 0 4px}
+  .main{display:block;margin:0}
+  .boardwrap{overflow:visible;border:0;padding:0}
+  .board{min-width:0}
+  .card,.wcard{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+
+<div id="loginView" hidden>
+  <form class="login" id="loginForm">
+    <h1>看護 訪問スケジュール盤</h1>
+    <label for="pin" class="small">PINを入れてください</label>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="current-password" aria-label="PIN">
+    <button class="primary" type="submit">ひらく</button>
+    <div class="err" id="loginErr" hidden></div>
+  </form>
+</div>
+
+<div id="app" hidden>
+<div class="top">
+  <h1>看護 訪問スケジュール盤</h1>
+  <span class="note" id="roleNote"></span>
+  <span style="flex:1"></span>
+  <button id="reload">最新にする</button>
+  <button id="printBtn">印刷</button>
+  <button id="logout">ログアウト</button>
+</div>
+
+<div class="err" id="problems" hidden></div>
+
+<div class="bar">
+  <button id="prev" aria-label="前へ">◀</button>
+  <span class="dlabel" id="dlabel"></span>
+  <button id="next" aria-label="次へ">▶</button>
+  <input type="date" id="dpick" aria-label="日付を選ぶ">
+  <button id="today">今日</button>
+  <span style="flex:1"></span>
+  <div class="dirty" id="dirty" hidden><span id="dirtyText"></span><button id="undo">1つ戻す</button><button class="primary" id="commit">まとめて確定</button></div>
+</div>
+
+<div class="bar">
+  <div class="seg adminOnly" role="group" aria-label="変更の範囲">
+    <button id="mDay" aria-pressed="true">この日だけ変える</button>
+    <button id="mWeek" aria-pressed="false">毎週の型を変える</button>
+  </div>
+  <span class="modehint adminOnly" id="modehint"></span>
+  <span style="flex:1"></span>
+  <div class="seg" role="group" aria-label="表示">
+    <button id="vBoard" aria-pressed="true">盤面</button>
+    <button id="vWeek" aria-pressed="false">週の一覧（月〜金）</button>
+    <button id="vList" aria-pressed="false">担当ごとの一覧</button>
+  </div>
+</div>
+
+<div class="bar">
+  <div class="chips" id="chips"></div>
+  <span style="flex:1"></span>
+  <label class="small viewOnly">自分の列 <select id="myLane"><option value="">（全部）</option></select></label>
+  <button id="copyPrev" class="adminOnly">先週の同じ曜日から列と担当を写す</button>
+</div>
+
+<div class="main">
+  <div>
+    <div class="printtitle" id="printTitle"></div>
+    <div class="boardwrap" id="boardwrap"><div class="board" id="board"></div></div>
+    <div class="listview" id="listview" hidden></div>
+    <div class="week" id="weekview" hidden></div>
+    <div class="legend">
+      <span><span class="sw k"></span>介護保険</span>
+      <span><span class="sw i"></span>医療保険</span>
+      <span><span class="sw n"></span>新規</span>
+      <span><span class="sw m"></span>その他（施設・サ担・会議）</span>
+      <span style="color:var(--danger)">赤枠＝時間が重なっている</span>
+    </div>
+    <div class="help adminOnly">
+      <span>カードを動かす：ドラッグ（10分刻み）</span>
+      <span>カードを押す：時間・週の決まり・特指示を直す</span>
+      <span>未配置のカードを押す：空いている所を点線で表示</span>
+      <span>動かしただけでは保存されません。「まとめて確定」で保存します</span>
+    </div>
+  </div>
+  <aside class="tray" id="tray"></aside>
+</div>
+</div>
+
+<div class="drawer" id="drawer" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="logic.js"></script>
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbxoZQbEMT9AMOkCy2k2B6JdtnDUHbI0_m_7DtLJE6aGOE4OI9mFLChZvECLe2Ur6T4/exec';   // GAS の /exec（デプロイ手順.md）
+const K = KangoBan, PX = 1.3, T0 = K.T0, T1 = K.T1, LUNCH = K.LUNCH, DOW = '日月火水木金土', LETTERS = 'ABCDEFGH';
+const LS = { token: 'kango-ban-token', dev: 'kango-ban-device', lane: 'kango-ban-mylane' };
+const $ = (s) => document.querySelector(s);
+const pad = (n) => String(n).padStart(2, '0');
+const hm = K.fmtHm;
+const toMin = (s) => K.parseHm(s);
+const ds = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parse = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const md = (s) => { const d = parse(s); return `${d.getMonth() + 1}/${d.getDate()}`; };
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const snap10 = (m) => Math.round(m / 10) * 10;
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* 覚えられなくても動く */ } };
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 10));
+const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+function nextWeekday(d, step) { let x = new Date(d); do { x = addDays(x, step); } while (x.getDay() === 0 || x.getDay() === 6); return x; }
+function baseDate() { const t = new Date(); t.setHours(0, 0, 0, 0); return (t.getDay() === 0 || t.getDay() === 6) ? nextWeekday(t, 1) : t; }
+
+let S = null, PROBLEMS = [], VERSION = '', ADMIN = false, BASE = '', cur = ds(baseDate()), mode = 'day', view = 'board', pick = null, drawerRef = null, undo = [], R = null, busy = false;
+const board = $('#board'), tray = $('#tray'), drawer = $('#drawer');
+document.documentElement.style.setProperty('--H', ((T1 - T0) * PX) + 'px');
+document.documentElement.style.setProperty('--hour', (60 * PX) + 'px');
+document.documentElement.style.setProperty('--half', (30 * PX) + 'px');
+
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 3000); }
+
+// ── API ──
+async function api(body) {
+  if (window.KangoMock) return window.KangoMock.call(body);
+  if (!API_URL) return { ok: false, error: 'API の URL が未設定です（デプロイ手順.md）' };
+  for (let i = 0; i < 2; i++) {
+    try {
+      const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+      return await r.json();
+    } catch (e) { if (i === 1) return { ok: false, error: '通信できませんでした。電波の良い所でもう一度お試しください' }; }
+  }
+}
+function deviceId() { let d = lsGet(LS.dev); if (!d) { d = 'dev-' + uuid(); lsSet(LS.dev, d); } return d; }
+
+function showLogin(msg) {
+  $('#app').hidden = true; $('#loginView').hidden = false; closeDrawer();
+  const e = $('#loginErr'); e.textContent = msg || ''; e.hidden = !msg; $('#pin').value = ''; $('#pin').focus();
+}
+$('#loginForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const pin = $('#pin').value.trim();
+  if (!pin) { showLogin('PINを入れてください'); return; }
+  const r = await api({ action: 'login', pin, deviceId: deviceId(), requestId: uuid() });
+  if (!r.ok) { showLogin(r.error); return; }
+  lsSet(LS.token, r.data.token);
+  await loadBoard(true);
+});
+$('#pin').addEventListener('input', () => { $('#loginErr').hidden = true; });
+
+async function loadBoard(first) {
+  const r = await api({ action: 'board', token: lsGet(LS.token) });
+  if (!r.ok) { if (r.authError) { lsSet(LS.token, null); showLogin(r.error); } else toast(r.error); return false; }
+  S = r.data.state; VERSION = r.data.version; ADMIN = r.data.role === 'admin'; PROBLEMS = r.data.problems || []; BASE = JSON.stringify(S); undo = []; pick = null;
+  document.body.classList.toggle('admin', ADMIN);
+  document.querySelectorAll('.adminOnly').forEach((el) => (el.hidden = !ADMIN));
+  document.querySelectorAll('.viewOnly').forEach((el) => (el.hidden = ADMIN));
+  if (first && !ADMIN) view = 'list';
+  $('#roleNote').textContent = ADMIN ? '管理者：動かしてから「まとめて確定」で保存します' : '看護師：見るだけ（組み替えは管理者がします）';
+  $('#loginView').hidden = true; $('#app').hidden = false;
+  if (drawerRef) buildDrawer();
+  render();
+  return true;
+}
+
+// ── 状態の操作（下書き） ──
+function snap() { undo.push(JSON.stringify(S)); if (undo.length > 80) undo.shift(); }
+function dayObj(date, create) { if (!S.days[date]) { if (!create) return {}; S.days[date] = {}; } return S.days[date]; }
+function setMove(date, key, v) { const d = dayObj(date, true); (d.moves || (d.moves = {}))[key] = v; }
+function clearMove(date, key) { const d = S.days[date]; if (d && d.moves) delete d.moves[key]; }
+function lanesOf(date) { return (S.days[date] && S.days[date].lanes) || S.settings.defLanes.slice(); }
+const client = (id) => S.clients.find((c) => c.id === id);
+const slotOf = (id) => S.slots.find((s) => s.id === id);
+const allItems = () => (R ? [...R.placed, ...R.tray, ...R.off] : []);
+const findItem = (k) => allItems().find((i) => i.key === k);
+const nameOf = (it) => (it.kind === 'e' ? it.title : (client(it.clientId) || {}).name || '');
+
+function typeCls(it) { if (it.kind === 'e') return 'm'; const c = client(it.clientId) || {}; if (c.ins === 'm') return 'm'; if (c.isNew) return 'n'; return c.ins === 'i' ? 'i' : 'k'; }
+function weekBadge(it) { return it.kind === 's' && it.weeks && it.weeks.length ? `<span class="wkb" title="毎週ではない（第${it.weeks.join('・')}週だけ訪問）">第${it.weeks.join('・')}週</span>` : ''; }
+function ruleTags(it) {
+  const t = [], c = it.kind === 'e' ? null : client(it.clientId);
+  if (it.kind === 'p') t.push('特指示');
+  if (c && c.isNew) t.push('新規');
+  if (it.moved && it.kind !== 'e') t.push('この日だけ');
+  if (c && c.note) t.push('※' + c.note);
+  return t;
+}
+function cardHTML(it, inTray) {
+  const pos = inTray ? '' : ` style="top:${(it.start - T0) * PX}px;height:${it.min * PX - 2}px"`;
+  const tags = ruleTags(it);
+  let flag = '';
+  if (it.bad) flag = '<span class="flag bad">重なり </span>'; else if (it.warn) flag = '<span class="flag warn">間が短い </span>';
+  const time = inTray && it.start != null && it.kind !== 'u' ? `${hm(it.start)}〜 ` : '';
+  const sub = `${weekBadge(it)}${flag}${time}${it.min}分${tags.length ? '・' + tags.join('・') : ''}`;
+  const more = inTray && ADMIN ? `<button class="more" data-more="${esc(it.key)}">詳しく</button>` : '';
+  const why = inTray && it.why ? `<div class="why">${esc(it.why)}</div>` : '';
+  return `<div class="card ${typeCls(it)}${it.bad ? ' bad' : ''}${it.warn ? ' warn' : ''}${pick === it.key ? ' picked' : ''}" data-key="${esc(it.key)}" tabindex="0"${pos}>${more}<div class="nm">${esc(nameOf(it))}</div><div class="sub">${sub}</div>${why}</div>`;
+}
+
+// ── 表示 ──
+function render() {
+  if (!S) return;
+  R = K.itemsFor(S, cur);
+  const d = parse(cur);
+  $('#dlabel').innerHTML = `${d.getMonth() + 1}月${d.getDate()}日（${DOW[d.getDay()]}）<span class="wk">第${R.wk}週</span>`;
+  if (view === 'week') { const mon = addDays(d, 1 - d.getDay()); $('#dlabel').innerHTML = `${md(ds(mon))}（月）〜${md(ds(addDays(mon, 4)))}（金）の週`; }
+  $('#printTitle').textContent = `看護 訪問スケジュール　${d.getMonth() + 1}月${d.getDate()}日（${DOW[d.getDay()]}）第${R.wk}週`;
+  $('#dpick').value = cur;
+  $('#problems').hidden = !ADMIN || !PROBLEMS.length;
+  $('#problems').textContent = PROBLEMS.length ? `シートに読めない値があります。直すまで保存できません：${PROBLEMS.slice(0, 5).join(' ／ ')}` : '';
+  $('#mDay').setAttribute('aria-pressed', mode === 'day'); $('#mWeek').setAttribute('aria-pressed', mode === 'week');
+  $('#vBoard').setAttribute('aria-pressed', view === 'board'); $('#vList').setAttribute('aria-pressed', view === 'list'); $('#vWeek').setAttribute('aria-pressed', view === 'week');
+  $('#modehint').textContent = mode === 'day' ? `動かすと ${md(cur)} だけ変わります（急な組み替え向け）` : `動かすと 毎週${DOW[R.dow]}曜 の型が変わります`;
+  const nBad = R.placed.filter((i) => i.bad).length;
+  $('#chips').innerHTML = `<span class="chip">訪問 ${R.placed.filter((i) => i.kind !== 'e').length}件・${R.lanes.length}列</span>`
+    + `<span class="chip${R.tray.length ? ' warn' : ''}">未配置 ${R.tray.length}</span>`
+    + `<span class="chip${nBad ? ' bad' : ''}">重なり ${nBad}</span>`
+    + (R.off.length ? `<span class="chip">この日お休み ${R.off.length}</span>` : '')
+    + (R.paused.length ? `<span class="chip">休止中 ${R.paused.length}</span>` : '');
+  const n = undo.length, dirty = JSON.stringify(S) !== BASE;
+  $('#dirty').hidden = !ADMIN || !dirty;
+  $('#dirtyText').textContent = `未確定の変更 ${n}件`;
+  const ml = $('#myLane'), mine = lsGet(LS.lane) || '';
+  ml.innerHTML = '<option value="">（全部）</option>' + R.lanes.map((L) => `<option${L === mine ? ' selected' : ''}>${esc(L)}</option>`).join('');
+  $('#boardwrap').hidden = view !== 'board'; $('#listview').hidden = view !== 'list'; $('#weekview').hidden = view !== 'week';
+  tray.hidden = view === 'week'; $('.main').classList.toggle('wide', view === 'week');
+  renderBoard(); renderTray(); if (view === 'list') renderList(); if (view === 'week') renderWeek();
+}
+
+function renderBoard() {
+  const lanes = R.lanes, staff = (S.days[cur] && S.days[cur].staff) || {};
+  board.style.setProperty('--n', lanes.length);
+  const used = {}; lanes.forEach((L) => { if (staff[L]) used[staff[L]] = (used[staff[L]] || 0) + 1; });
+  let h = '<div></div>';
+  for (const L of lanes) {
+    const v = staff[L] || '';
+    const cnt = R.placed.filter((i) => i.lane === L && i.kind !== 'e');
+    const mins = cnt.reduce((a, i) => a + i.min, 0);
+    const who = ADMIN
+      ? `<select data-staff="${esc(L)}" class="${v && used[v] > 1 ? 'dup' : ''}" aria-label="${esc(L)}列の担当"><option value="">（担当 未定）</option>${S.staff.map((s) => `<option${s === v ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select>`
+      : `<div class="who">${esc(v || '担当 未定')}</div>`;
+    h += `<div class="lh"><div class="lt"><span>${esc(L)}列</span>${ADMIN ? `<button class="x" data-rm="${esc(L)}" title="この日は${esc(L)}列を外す（中の人は未配置へ）">外す</button>` : ''}</div>
+      ${who}<div class="cnt">${cnt.length}件・${Math.floor(mins / 60)}時間${mins % 60 ? (mins % 60) + '分' : ''}</div></div>`;
+  }
+  h += `<div class="addcol">${ADMIN ? '<button id="addLane" title="列を増やす">＋列</button>' : ''}</div>`;
+  h += '<div class="band"><span>8:30 情報収集</span><span>8:40 朝礼・情報共有</span></div>';
+  let tk = ''; for (let m = T0; m <= T1; m += 30) tk += `<span class="${m % 60 ? '' : 'h'}" style="top:${(m - T0) * PX}px">${hm(m)}</span>`;
+  h += `<div class="tcol">${tk}</div>`;
+  const pk = pick && findItem(pick);
+  for (const L of lanes) {
+    let c = `<div class="lunch" style="top:${(LUNCH[0] - T0) * PX}px;height:${(LUNCH[1] - LUNCH[0]) * PX}px">昼</div>`;
+    R.placed.filter((i) => i.lane === L).forEach((it) => (c += cardHTML(it, false)));
+    if (pk) K.freeSlots(R.placed, L, pk.min, S.settings.gapWarn, pk.key).forEach((t) => (c += `<div class="ghost" data-ghost="${esc(L)}" data-t="${t}" style="top:${(t - T0) * PX}px;height:${pk.min * PX - 2}px">ここに入れる<br>${hm(t)}〜</div>`));
+    h += `<div class="lane" data-lane="${esc(L)}">${c}</div>`;
+  }
+  h += '<div></div>';
+  board.innerHTML = h;
+}
+
+function renderTray() {
+  const pk = pick && findItem(pick);
+  let h = `<div><h3>未配置 ${R.tray.length}件</h3><div class="small">${pk ? `<b>${esc(nameOf(pk))}</b> の入れられる所を盤面に点線で出しています。<button id="unpick" style="font-size:11px;padding:0 6px">やめる</button>`
+    : ADMIN ? '盤面へドラッグ。押すと空いている所を表示します。盤面のカードをここへ落とすと、その日だけ外せます。' : 'まだ列に入っていない訪問です。'}</div></div>`;
+  h += `<div class="list">${R.tray.length ? R.tray.map((it) => cardHTML(it, true)).join('') : '<div class="empty">未配置はありません</div>'}</div>`;
+  if (ADMIN) h += `<div class="rowf"><button id="addNewBtn">＋新規の利用者</button><button id="addEvBtn">＋サ担・会議</button></div>
+  <form class="form" id="newForm" hidden>
+    <b>新規の利用者（黄色で表示）</b>
+    <input type="text" id="nfName" placeholder="山本 ハル" aria-label="名前">
+    <div class="rowf"><select id="nfIns" aria-label="保険"><option value="k">介護保険</option><option value="i">医療保険</option><option value="m">その他（施設など）</option></select>
+    <select id="nfMin" aria-label="訪問時間"><option>30</option><option selected>60</option><option>90</option></select>分</div>
+    <div class="rowf"><button type="submit">未配置に入れる</button><button type="button" id="nfCancel">やめる</button></div>
+    <div class="err" id="nfErr" hidden></div>
+  </form>
+  <form class="form" id="evForm" hidden>
+    <b>サ担・会議（${md(cur)}）</b>
+    <input type="text" id="efTitle" placeholder="サ担（〇〇様宅）" aria-label="内容">
+    <div class="rowf"><input type="time" id="efTime" value="14:00" step="600" aria-label="開始時刻">
+    <select id="efMin" aria-label="時間"><option>30</option><option selected>60</option><option>90</option></select>分</div>
+    <div class="rowf"><button type="submit">未配置に入れる</button><button type="button" id="efCancel">やめる</button></div>
+    <div class="err" id="efErr" hidden></div>
+  </form>`;
+  if (R.off.length) h += `<div><h3>この日お休み</h3><ul class="plain">${R.off.map((it) => `<li><span>${esc(nameOf(it))}（${esc(it.why)}）</span>${ADMIN ? `<button data-restore="${esc(it.key)}" style="font-size:11px;padding:0 6px">戻す</button>` : ''}</li>`).join('')}</ul></div>`;
+  if (R.skip.length) h += `<div><h3>今日は出ない人（${DOW[R.dow]}曜・第${R.wk}週）</h3><ul class="plain">${R.skip.map((x) => `<li><span>${esc((client(x.clientId) || {}).name)}</span><span class="small">${esc(x.why)}</span></li>`).join('')}</ul></div>`;
+  if (R.paused.length) h += `<div><h3>休止中 ${R.paused.length}人</h3><div class="small" style="margin-bottom:4px">入院などで盤面から外しています。曜日・時間は残っています。</div><ul class="plain">${R.paused.map((x) => `<li><span><button class="linkish" data-popen="${esc(x.clientId)}">${esc((client(x.clientId) || {}).name)}</button><br><span class="small">${esc(x.why)}</span></span>${ADMIN ? `<button data-resume="${esc(x.clientId)}" style="font-size:11px;padding:0 6px">再開する</button>` : ''}</li>`).join('')}</ul></div>`;
+  tray.innerHTML = h;
+}
+
+function renderList() {
+  const staff = (S.days[cur] && S.days[cur].staff) || {}, mine = lsGet(LS.lane) || '';
+  const lanes = mine && R.lanes.includes(mine) ? [mine, ...R.lanes.filter((L) => L !== mine)] : R.lanes;
+  let h = '';
+  for (const L of lanes) {
+    const arr = R.placed.filter((i) => i.lane === L).sort((a, b) => a.start - b.start);
+    h += `<div class="lv${L === mine ? ' mine' : ''}"><h3><span>${esc(L)}列</span><span>${esc(staff[L] || '担当 未定')}</span></h3><ol>${arr.map((it) => {
+      const tg = ruleTags(it);
+      return `<li class="${typeCls(it)}"><span>${hm(it.start)}〜${hm(it.start + it.min)}</span><span><b>${esc(nameOf(it))}</b> ${weekBadge(it)}${tg.length ? `<small>${esc(tg.join('・'))}</small>` : ''}${it.bad ? ' <b style="color:var(--danger)">重なり</b>' : ''}</span></li>`;
+    }).join('') || '<li class="m"><span></span><span>予定なし</span></li>'}</ol></div>`;
+  }
+  if (R.tray.length) h += `<div class="lv"><h3><span>未配置</span><span>${R.tray.length}件</span></h3><ol>${R.tray.map((it) => `<li class="${typeCls(it)}"><span>${it.min}分</span><span><b>${esc(nameOf(it))}</b> <small>${esc(it.why || '')}</small></span></li>`).join('')}</ol></div>`;
+  if (R.paused.length) h += `<div class="lv"><h3><span>休止中</span><span>${R.paused.length}人</span></h3><ol>${R.paused.map((x) => `<li class="m"><span>休止</span><span><b>${esc((client(x.clientId) || {}).name)}</b> <small>${esc(x.why)}</small></span></li>`).join('')}</ol></div>`;
+  $('#listview').innerHTML = h;
+}
+
+function renderWeek() {
+  const d0 = parse(cur), mon = addDays(d0, 1 - d0.getDay());
+  let tk = ''; for (let m = T0; m <= T1; m += 30) tk += `<span class="${m % 60 ? '' : 'h'}" style="top:${(m - T0) * PX}px">${hm(m)}</span>`;
+  let h = `<div class="wtime"><div class="whead"></div><div class="wlh"></div><div class="tcol">${tk}</div></div>`;
+  for (let k = 0; k < 5; k++) {
+    const date = ds(addDays(mon, k)), r = K.itemsFor(S, date), dd = parse(date), staff = (S.days[date] && S.days[date].staff) || {};
+    const nb = r.placed.filter((i) => i.bad).length;
+    const lanes = r.lanes.map((L) => {
+      const cards = r.placed.filter((i) => i.lane === L).map((it) => {
+        const nm = nameOf(it);
+        return `<div class="wcard ${typeCls(it)}${it.bad ? ' bad' : ''}" data-go="${esc(date)}" title="${esc(nm)} ${hm(it.start)}〜${hm(it.start + it.min)}（${it.min}分）" style="top:${(it.start - T0) * PX}px;height:${it.min * PX - 2}px"><div class="nm">${esc(nm)}</div>${weekBadge(it)}</div>`;
+      }).join('');
+      return `<div class="lane"><div class="lunch" style="top:${(LUNCH[0] - T0) * PX}px;height:${(LUNCH[1] - LUNCH[0]) * PX}px"></div>${cards}</div>`;
+    }).join('');
+    h += `<div class="wday${date === cur ? ' cur' : ''}" style="--wn:${r.lanes.length}">
+      <button class="whead" data-go="${esc(date)}" title="この日の盤面を開く"><b>${dd.getMonth() + 1}/${dd.getDate()}（${DOW[dd.getDay()]}）<span class="wk">第${r.wk}週</span></b>
+      <span class="small">${r.placed.filter((i) => i.kind !== 'e').length}件${r.tray.length ? `・未配置${r.tray.length}` : ''}${nb ? `・<span style="color:var(--danger)">重なり${nb}</span>` : ''}</span></button>
+      <div class="wlh">${r.lanes.map((L) => `<span>${esc(L)}${staff[L] ? ' ' + esc(staff[L]) : ''}</span>`).join('')}</div>
+      <div class="wgrid">${lanes}</div></div>`;
+  }
+  $('#weekview').innerHTML = h;
+}
+
+// ── 組み替え（管理者だけ） ──
+function applyPlace(it, lane, start) {
+  if (!ADMIN) return;
+  snap(); const dow = parse(cur).getDay();
+  if (mode === 'week' && (it.kind === 's' || it.kind === 'u')) {
+    if (it.kind === 's') { const s = slotOf(it.slotId); s.lane = lane; s.start = start; clearMove(cur, it.key); }
+    else S.slots.push({ id: newId('s'), clientId: it.clientId, dow, lane, start, min: it.min, weeks: null });
+    toast(`毎週${DOW[dow]}曜の型：${nameOf(it)} を ${lane}列 ${hm(start)} に`);
+  } else {
+    if (it.kind === 'u') { const day = dayObj(cur, true); (day.adds || (day.adds = [])).push({ id: newId('a'), clientId: it.clientId, lane, start, min: it.min }); }
+    else if (it.kind === 'a') { const a = dayObj(cur, true).adds.find((x) => x.id === it.addId); a.lane = lane; a.start = start; }
+    else if (it.kind === 'e') { const e = S.events.find((x) => x.id === it.eventId); e.lane = lane; e.start = start; }
+    else setMove(cur, it.key, { lane, start, min: it.min });
+    toast(`${md(cur)}だけ：${nameOf(it)} を ${lane}列 ${hm(start)} に` + (mode === 'week' && it.kind !== 'u' ? (it.kind === 'p' ? '（特指示は毎日その日ごとに入れます）' : '（この予定は日付のものです）') : ''));
+  }
+  pick = null; render(); if (drawerRef) buildDrawer();
+}
+function toTray(it) {
+  if (!ADMIN || it.kind === 'u') return;
+  snap();
+  if (it.kind === 'a') { const day = dayObj(cur, true); day.adds = (day.adds || []).filter((a) => a.id !== it.addId); }
+  else if (it.kind === 'e') S.events.find((x) => x.id === it.eventId).lane = null;
+  else setMove(cur, it.key, { tray: 1 });
+  toast(`${md(cur)}だけ：${nameOf(it)} を未配置へ`); render();
+}
+
+async function commit() {
+  if (!ADMIN || busy) return;
+  busy = true; $('#commit').textContent = '保存しています…';
+  const r = await api({ action: 'save', token: lsGet(LS.token), requestId: uuid(), version: VERSION, state: S });
+  busy = false; $('#commit').textContent = 'まとめて確定';
+  if (r.ok) { VERSION = r.data.version; BASE = JSON.stringify(S); undo = []; render(); toast('保存しました'); return; }
+  if (r.authError) { lsSet(LS.token, null); showLogin(r.error); return; }
+  if (r.conflict) { toast('他の人が先に保存しました。最新の盤面を読み込みました（いまの変更は保存されていません）'); await loadBoard(false); return; }
+  toast(r.error);
+}
+
+// ── ドラッグ ──
+let drag = null;
+document.addEventListener('pointerdown', (e) => {
+  if (e.button > 0 || e.target.closest('button,select,input')) return;
+  const el = e.target.closest('.card[data-key]'); if (!el) return;
+  const it = findItem(el.dataset.key); if (!it) return;
+  const r = el.getBoundingClientRect();
+  drag = { it, el, x0: e.clientX, y0: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, moved: false, inTray: !!el.closest('.tray'), pid: e.pointerId };
+});
+document.addEventListener('pointermove', (e) => {
+  if (!drag || e.pointerId !== drag.pid || !ADMIN) return;
+  if (!drag.moved) {
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
+    drag.moved = true; const g = drag.el.cloneNode(true); g.classList.add('dragging'); g.style.width = Math.max(drag.w, 124) + 'px';
+    g.style.height = (drag.it.min * PX - 2) + 'px'; g.querySelector('.more')?.remove(); document.body.appendChild(g); drag.g = g; drag.el.style.opacity = '.35';
+  }
+  e.preventDefault();
+  drag.g.style.transform = `translate(${e.clientX - drag.dx}px,${e.clientY - Math.min(drag.dy, 14)}px)`;
+  document.querySelectorAll('.lane.over,.tray.over').forEach((x) => x.classList.remove('over'));
+  board.querySelector('.preview')?.remove(); drag.target = null;
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  const lane = under && under.closest('#board .lane'), tr = under && under.closest('.tray');
+  if (lane) {
+    const rr = lane.getBoundingClientRect(); let m = T0 + snap10((e.clientY - Math.min(drag.dy, 14) - rr.top) / PX);
+    m = Math.max(T0, Math.min(T1 - drag.it.min, m));
+    lane.classList.add('over');
+    const p = document.createElement('div'); p.className = 'preview'; p.style.top = ((m - T0) * PX) + 'px'; p.style.height = (drag.it.min * PX - 2) + 'px';
+    p.textContent = `${hm(m)}〜${hm(m + drag.it.min)}`; lane.appendChild(p);
+    drag.target = { lane: lane.dataset.lane, start: m };
+  } else if (tr && !drag.inTray) { tr.classList.add('over'); drag.target = { tray: true }; }
+}, { passive: false });
+document.addEventListener('pointerup', (e) => {
+  if (!drag || e.pointerId !== drag.pid) return;
+  const d = drag; drag = null;
+  if (d.g) d.g.remove();
+  document.querySelectorAll('.lane.over,.tray.over').forEach((x) => x.classList.remove('over'));
+  if (!d.moved) {
+    if (d.inTray && ADMIN) { pick = pick === d.it.key ? null : d.it.key; render(); }
+    else openDrawer(d.it);
+    return;
+  }
+  if (d.target && d.target.lane) applyPlace(d.it, d.target.lane, d.target.start);
+  else if (d.target && d.target.tray) toTray(d.it);
+  else render();
+});
+document.addEventListener('pointercancel', () => { if (drag) { drag.g?.remove(); drag = null; render(); } });
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.target.closest('input,select') && ADMIN) { e.preventDefault(); doUndo(); }
+  if (e.key === 'Escape') { if (!drawer.hidden) closeDrawer(); else if (pick) { pick = null; render(); } }
+  if (e.key === 'Enter' && e.target.matches('.card[data-key]')) { const it = findItem(e.target.dataset.key); if (it) openDrawer(it); }
+});
+window.addEventListener('beforeunload', (e) => { if (S && ADMIN && JSON.stringify(S) !== BASE) { e.preventDefault(); e.returnValue = ''; } });
+
+board.addEventListener('click', (e) => {
+  if (!ADMIN) return;
+  const g = e.target.closest('.ghost');
+  if (g) { const it = findItem(pick); if (it) applyPlace(it, g.dataset.ghost, +g.dataset.t); return; }
+  const rm = e.target.closest('[data-rm]');
+  if (rm) {
+    snap(); const day = dayObj(cur, true); day.lanes = lanesOf(cur).filter((x) => x !== rm.dataset.rm);
+    const n = R.placed.filter((i) => i.lane === rm.dataset.rm).length;
+    toast(`${md(cur)}は ${rm.dataset.rm}列を外しました。${n}件が未配置へ`); render(); return;
+  }
+  if (e.target.id === 'addLane') {
+    const ls = lanesOf(cur); const L = [...LETTERS].find((x) => !ls.includes(x)); if (!L) { toast('これ以上は増やせません'); return; }
+    snap(); dayObj(cur, true).lanes = [...ls, L].sort(); render(); toast(`${md(cur)}に ${esc(L)}列を足しました`);
+  }
+});
+board.addEventListener('change', (e) => {
+  const s = e.target.closest('[data-staff]'); if (!s || !ADMIN) return;
+  snap(); const day = dayObj(cur, true); (day.staff || (day.staff = {}))[s.dataset.staff] = s.value; render();
+});
+tray.addEventListener('click', (e) => {
+  const t = e.target;
+  if (t.id === 'unpick') { pick = null; render(); return; }
+  const more = t.closest('[data-more]'); if (more) { const it = findItem(more.dataset.more); if (it) openDrawer(it); return; }
+  const po = t.closest('[data-popen]'); if (po) { drawerRef = { type: 'c', id: po.dataset.popen, key: null }; buildDrawer(); drawer.hidden = false; drawer.scrollTop = 0; return; }
+  const rz = t.closest('[data-resume]');
+  if (rz && ADMIN) { const c = client(rz.dataset.resume); snap(); c.pause = null; render(); toast(`${c.name} を再開しました。元の曜日・時間・列に戻ります`); return; }
+  const rs = t.closest('[data-restore]'); if (rs && ADMIN) { snap(); clearMove(cur, rs.dataset.restore); render(); toast('戻しました'); return; }
+  if (t.id === 'addNewBtn') { $('#newForm').hidden = false; $('#evForm').hidden = true; $('#nfName').focus(); }
+  if (t.id === 'addEvBtn') { $('#evForm').hidden = false; $('#newForm').hidden = true; $('#efTitle').focus(); }
+  if (t.id === 'nfCancel') $('#newForm').hidden = true;
+  if (t.id === 'efCancel') $('#evForm').hidden = true;
+});
+tray.addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!ADMIN) return;
+  if (e.target.id === 'newForm') {
+    const name = $('#nfName').value.trim(); if (!name) { const er = $('#nfErr'); er.textContent = '名前を入れてください'; er.hidden = false; return; }
+    snap(); const c = { id: newId('c'), name, ins: $('#nfIns').value, isNew: true, start: '', end: '', note: '', defMin: +$('#nfMin').value, sp: null };
+    S.clients.push(c); pick = 'u:' + c.id; render(); toast(`${name} を未配置に入れました。空いている所を点線で出しています`);
+  }
+  if (e.target.id === 'evForm') {
+    const title = $('#efTitle').value.trim(); if (!title) { const er = $('#efErr'); er.textContent = '内容を入れてください'; er.hidden = false; return; }
+    snap(); const ev = { id: newId('e'), date: cur, title, start: snap10(toMin($('#efTime').value || '14:00')), min: +$('#efMin').value, lane: null };
+    S.events.push(ev); pick = 'e:' + ev.id; render(); toast(`${title} を未配置に入れました`);
+  }
+});
+tray.addEventListener('input', (e) => { if (e.target.id === 'nfName') $('#nfErr').hidden = true; if (e.target.id === 'efTitle') $('#efErr').hidden = true; });
+
+// ── 詳細（管理者は直せる・看護師は読むだけ） ──
+function openDrawer(it) {
+  drawerRef = it.kind === 'e' ? { type: 'e', id: it.eventId, key: it.key } : { type: 'c', id: it.clientId, key: it.key };
+  buildDrawer(); drawer.hidden = false; drawer.scrollTop = 0;
+}
+function closeDrawer() { drawer.hidden = true; drawerRef = null; }
+const sel = (f, v, opts, extra = '') => `<select data-f="${f}" ${extra}>${opts.map((o) => { const [val, lab] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}"${String(val) === String(v) ? ' selected' : ''}>${esc(lab)}</option>`; }).join('')}</select>`;
+const laneOpts = () => [...LETTERS.slice(0, 6)].map((x) => [x, x + '列']);
+const minOpts = [[30, '30分'], [60, '60分'], [90, '90分']];
+const hmVal = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+const insLabel = (c) => (c.ins === 'i' ? '医療保険' : c.ins === 'm' ? 'その他' : '介護保険');
+function buildDrawer() {
+  if (!drawerRef || !S) return; const keep = drawer.scrollTop; let h = '';
+  if (drawerRef.type === 'e') {
+    const ev = S.events.find((x) => x.id === drawerRef.id); if (!ev) return closeDrawer();
+    h = `<div class="dh"><div><span class="pill m">サ担・会議</span><h2>${esc(ev.title)}</h2><div class="small">${md(ev.date)}（${DOW[parse(ev.date).getDay()]}） ${hm(ev.start)}〜 ${ev.min}分${ev.lane ? ' ' + ev.lane + '列' : ''}</div></div><button data-act="close">閉じる</button></div>`;
+    if (ADMIN) h += `<section><div class="slot"><label class="blk">内容 <input type="text" data-f="etitle" value="${esc(ev.title)}"></label>
+      <div class="rowf"><input type="time" step="600" data-f="estart" value="${hmVal(ev.start)}" aria-label="開始">${sel('emin', ev.min, minOpts)}${sel('elane', ev.lane || '', [['', '未配置'], ...laneOpts()])}</div></div>
+      <button data-act="edel">この予定を消す</button></section>`;
+  } else {
+    const c = client(drawerRef.id); if (!c) return closeDrawer();
+    const it = drawerRef.key && findItem(drawerRef.key); const today = it && it.kind !== 'u';
+    const cls = c.ins === 'm' ? 'm' : c.isNew ? 'n' : (c.ins === 'i' ? 'i' : 'k');
+    const slots = S.slots.filter((s) => s.clientId === c.id);
+    h = `<div class="dh"><div><span class="pill ${cls}">${c.isNew ? '新規・' : ''}${insLabel(c)}</span><h2>${esc(c.name)}</h2></div><button data-act="close">閉じる</button></div>`;
+    if (today) {
+      const st = R.off.includes(it) ? 'この日はお休み（' + esc(it.why) + '）' : R.tray.includes(it) ? '未配置' : `${esc(it.lane)}列 ${hm(it.start)}〜${hm(it.start + it.min)}`;
+      h += `<section><h3>${md(cur)}（${DOW[R.dow]}）</h3><div class="small">${st}${it.moved ? '（この日だけ変更あり）' : ''}</div>`;
+      if (ADMIN) h += `<div class="rowf" style="margin-top:8px">時間 ${[30, 60, 90].map((v) => `<button data-act="dmin" data-v="${v}"${it.min === v ? ' style="border-color:var(--accent);color:var(--accent)"' : ''}>${v}分</button>`).join('')}</div>
+        <div class="rowf" style="margin-top:8px"><select id="offReason" aria-label="理由"><option>入院</option><option>キャンセル</option><option>ショートステイ</option><option>その他</option></select><button data-act="off">この日はお休みにする</button></div>
+        ${(it.moved && it.kind !== 'a') || R.off.includes(it) || R.tray.includes(it) ? '<div style="margin-top:8px"><button data-act="restore">この日の変更を元に戻す</button></div>' : ''}`;
+      h += '</section>';
+    } else if (ADMIN && drawerRef.key && drawerRef.key.startsWith('u:')) {
+      h += '<section><div class="small">盤面へドラッグすると置けます。「この日だけ」ならその日だけ、「毎週の型」なら曜日の型として入ります。</div></section>';
+    }
+    const pz = c.pause;
+    if (pz) {
+      h += `<section><h3>休止中（${esc(pz.reason || '休止')}）</h3><div class="small">${md(pz.from)}から盤面に出していません。${pz.until ? `${md(pz.until)}から自動で戻ります。` : '再開する日は未定です。'}曜日・時間・列はそのまま残っています。</div>`;
+      if (ADMIN) h += `<div class="rowf" style="margin-top:8px"><label class="small">再開予定日 <input type="date" data-f="puntil" value="${esc(pz.until || '')}"></label><button class="primary" data-act="resume">今日から再開する</button></div>`;
+      h += '</section>';
+    } else if (ADMIN) {
+      h += `<section><h3>休止（入院など）</h3><div class="small">${md(cur)}から盤面に出さず、右の「休止中」に置いておきます。曜日・時間・列は残るので、再開すれば元に戻ります。1日だけ休むときは上の「この日はお休み」を使います。</div>
+        <div class="rowf" style="margin-top:8px"><select id="pReason" aria-label="休止の理由"><option>入院</option><option>ショートステイ</option><option>その他</option></select>
+        <label class="small">再開予定日（分かれば） <input type="date" id="pUntil"></label><button data-act="pause">休止にする</button></div></section>`;
+    }
+    h += '<section><h3>毎週の型</h3>';
+    if (!ADMIN) {
+      h += slots.length ? `<ul class="plain">${slots.map((s) => `<li><span>${DOW[s.dow]}曜 ${hm(s.start)}〜 ${s.min}分 ${esc(s.lane)}列</span><span>${s.weeks ? '第' + s.weeks.join('・') + '週' : '毎週'}</span></li>`).join('')}</ul>` : '<div class="small">なし</div>';
+      if (c.sp) h += `<div class="small" style="margin-top:8px">特指示：${md(c.sp.from)}〜${md(c.sp.to)} 毎日 ${hm(c.sp.start)}ごろ ${c.sp.min}分</div>`;
+      if (c.note) h += `<div class="small" style="margin-top:8px">メモ：${esc(c.note)}</div>`;
+      h += '</section>';
+    } else {
+      slots.forEach((s) => {
+        h += `<div class="slot"><div class="rowf">${sel('dow', s.dow, [1, 2, 3, 4, 5].map((d) => [d, DOW[d] + '曜']), `data-sid="${esc(s.id)}"`)}
+          <input type="time" step="600" data-f="start" data-sid="${esc(s.id)}" value="${hmVal(s.start)}" aria-label="開始">
+          ${sel('min', s.min, minOpts.some(([v]) => v === s.min) ? minOpts : [...minOpts, [s.min, s.min + '分']], `data-sid="${esc(s.id)}"`)}${sel('lane', s.lane, laneOpts(), `data-sid="${esc(s.id)}"`)}</div>
+          <div class="rowf"><span class="small">週：</span><label><input type="checkbox" data-f="every" data-sid="${esc(s.id)}"${!s.weeks ? ' checked' : ''}> 毎週</label>
+          ${[1, 2, 3, 4, 5].map((w) => `<label><input type="checkbox" data-f="wk" data-sid="${esc(s.id)}" data-w="${w}"${s.weeks && s.weeks.includes(w) ? ' checked' : ''}> 第${w}</label>`).join('')}
+          <span style="flex:1"></span><button data-act="delslot" data-sid="${esc(s.id)}" style="font-size:12px">この曜日をやめる</button></div></div>`;
+      });
+      h += '<button data-act="addslot">＋曜日を足す</button></section>';
+      const sp = c.sp || { from: cur, to: ds(addDays(parse(cur), 13)), start: 960, min: 30 };
+      h += `<section><h3>特別指示（期間中は毎日）</h3><div class="small" style="margin-bottom:6px">${c.sp ? `設定中：${md(c.sp.from)}〜${md(c.sp.to)} ${hm(c.sp.start)}ごろ ${c.sp.min}分。` : ''}期間中は毎日「未配置」に出ます。朝に空いている列へ入れてください。</div>
+        <div class="slot"><div class="rowf"><input type="date" id="spFrom" value="${sp.from}" aria-label="開始日">〜<input type="date" id="spTo" value="${sp.to}" aria-label="終了日"></div>
+        <div class="rowf"><input type="time" step="600" id="spStart" value="${hmVal(sp.start)}" aria-label="時刻">
+        <select id="spMin">${minOpts.map(([v, l]) => `<option value="${v}"${v === sp.min ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="rowf"><button data-act="spset">${c.sp ? '特指示を直す' : '特指示を出す'}</button>${c.sp ? '<button data-act="spclr">特指示を外す</button>' : ''}</div></div></section>`;
+      h += `<section><h3>基本</h3><div class="slot"><label class="blk">名前 <input type="text" data-f="name" value="${esc(c.name)}"></label>
+        <div class="rowf">${sel('ins', c.ins, [['k', '介護保険'], ['i', '医療保険'], ['m', 'その他（施設など）']])}<label><input type="checkbox" data-f="isNew"${c.isNew ? ' checked' : ''}> 新規（黄色）</label></div>
+        <label class="blk">メモ（カードに※で出ます） <input type="text" data-f="note" value="${esc(c.note || '')}" placeholder="ショートステイがない週だけ"></label>
+        <div class="rowf"><label>開始日 <input type="date" data-f="cstart" value="${c.start || ''}"></label><label>終了日 <input type="date" data-f="cend" value="${c.end || ''}"></label></div>
+        <div class="small">開始日より前は盤面に出ません。終了日を過ぎると自動で消えます。</div></div></section>`;
+    }
+  }
+  drawer.innerHTML = h; drawer.scrollTop = keep;
+}
+drawer.addEventListener('change', (e) => {
+  const t = e.target, f = t.dataset.f; if (!f || !drawerRef || !ADMIN) return;
+  snap();
+  if (drawerRef.type === 'e') {
+    const ev = S.events.find((x) => x.id === drawerRef.id);
+    if (f === 'etitle') ev.title = t.value.trim() || ev.title;
+    if (f === 'estart' && t.value) ev.start = snap10(toMin(t.value));
+    if (f === 'emin') ev.min = +t.value;
+    if (f === 'elane') ev.lane = t.value || null;
+  } else {
+    const c = client(drawerRef.id), s = t.dataset.sid ? slotOf(t.dataset.sid) : null;
+    switch (f) {
+      case 'name': c.name = t.value.trim() || c.name; break;
+      case 'ins': c.ins = t.value; break;
+      case 'isNew': c.isNew = t.checked; break;
+      case 'note': c.note = t.value.trim(); break;
+      case 'puntil': if (t.value && t.value <= c.pause.from) { undo.pop(); toast('再開予定日は休止を始めた日より後にしてください'); buildDrawer(); return; } c.pause.until = t.value; break;
+      case 'cstart': c.start = t.value; break;
+      case 'cend': c.end = t.value; break;
+      case 'dow': s.dow = +t.value; break;
+      case 'start': if (t.value) s.start = snap10(toMin(t.value)); break;
+      case 'min': s.min = +t.value; break;
+      case 'lane': s.lane = t.value; break;
+      case 'every': if (t.checked) s.weeks = null; break;
+      case 'wk': { const w = +t.dataset.w; let ws = s.weeks || []; ws = t.checked ? [...new Set([...ws, w])].sort((a, b) => a - b) : ws.filter((x) => x !== w); s.weeks = ws.length ? ws : null; break; }
+    }
+  }
+  render(); buildDrawer();
+});
+let delArm = false;
+drawer.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act;
+  if (a === 'close') return closeDrawer();
+  if (!ADMIN) return;
+  if (a === 'edel') {
+    if (!delArm) { delArm = true; b.textContent = 'もう一度押すと消します'; setTimeout(() => { delArm = false; }, 3000); return; }
+    delArm = false; snap(); S.events = S.events.filter((x) => x.id !== drawerRef.id); closeDrawer(); render(); toast('予定を消しました'); return;
+  }
+  const c = drawerRef.type === 'c' && client(drawerRef.id); if (!c) return;
+  const it = drawerRef.key && findItem(drawerRef.key);
+  if (a === 'pause') {
+    const until = $('#pUntil').value;
+    if (until && until <= cur) { toast('再開予定日は今日より後の日にしてください'); return; }
+    snap(); c.pause = { from: cur, until, reason: $('#pReason').value }; drawerRef.key = null;
+    toast(`${c.name} を休止にしました（${md(cur)}から）。右の「休止中」にあります`); render(); buildDrawer(); return;
+  }
+  if (a === 'resume') {
+    snap(); c.pause = null;
+    toast(`${c.name} を再開しました。元の曜日・時間・列に戻ります`); render(); buildDrawer(); return;
+  }
+  if (a === 'spset') {
+    const from = $('#spFrom').value, to = $('#spTo').value;
+    if (!from || !to || to < from) { toast('特指示の期間を正しく入れてください'); return; }
+    snap(); c.sp = { from, to, start: snap10(toMin($('#spStart').value || '16:00')), min: +$('#spMin').value }; toast(`特指示：${md(from)}〜${md(to)} 毎日、未配置に出します`);
+  } else {
+    snap();
+    if (a === 'dmin' && it) { const v = +b.dataset.v; if (it.kind === 'a') dayObj(cur, true).adds.find((x) => x.id === it.addId).min = v; else setMove(cur, it.key, { lane: it.lane, start: it.start, min: v }); toast(`${md(cur)}だけ ${v}分に`); }
+    if (a === 'off' && it) { const r = $('#offReason').value; if (it.kind === 'a') { const day = dayObj(cur, true); day.adds = (day.adds || []).filter((x) => x.id !== it.addId); } else setMove(cur, it.key, { off: 1, reason: r }); toast(`${md(cur)}は ${c.name} をお休み（${r}）に`); }
+    if (a === 'restore' && it) { clearMove(cur, it.key); toast('この日の変更を元に戻しました'); }
+    if (a === 'addslot') { const d = R.dow >= 1 && R.dow <= 5 ? R.dow : 1; S.slots.push({ id: newId('s'), clientId: c.id, dow: d, lane: lanesOf(cur)[0], start: 600, min: c.defMin || 60, weeks: null }); }
+    if (a === 'delslot') { S.slots = S.slots.filter((s) => s.id !== b.dataset.sid); drawerRef.key = null; }
+    if (a === 'spclr') { c.sp = null; toast('特指示を外しました'); }
+  }
+  render(); buildDrawer();
+});
+
+// ── ツールバー ──
+function go(date) { cur = date; pick = null; if (drawerRef) closeDrawer(); render(); }
+function doUndo() { if (!undo.length) { toast('戻せる操作はありません'); return; } S = JSON.parse(undo.pop()); render(); if (drawerRef) buildDrawer(); toast('1つ戻しました'); }
+$('#prev').onclick = () => go(view === 'week' ? ds(addDays(parse(cur), -7)) : ds(nextWeekday(parse(cur), -1)));
+$('#next').onclick = () => go(view === 'week' ? ds(addDays(parse(cur), 7)) : ds(nextWeekday(parse(cur), 1)));
+$('#today').onclick = () => go(ds(baseDate()));
+$('#dpick').onchange = (e) => { if (!e.target.value) return; let d = parse(e.target.value); if (d.getDay() === 0 || d.getDay() === 6) d = nextWeekday(d, 1); go(ds(d)); };
+$('#mDay').onclick = () => { mode = 'day'; render(); };
+$('#mWeek').onclick = () => { mode = 'week'; render(); };
+$('#vBoard').onclick = () => { view = 'board'; render(); };
+$('#vList').onclick = () => { view = 'list'; render(); };
+$('#vWeek').onclick = () => { view = 'week'; render(); };
+$('#undo').onclick = doUndo;
+$('#commit').onclick = commit;
+$('#myLane').onchange = (e) => { lsSet(LS.lane, e.target.value || null); render(); };
+$('#printBtn').onclick = () => { if (view !== 'board') { view = 'board'; render(); } setTimeout(() => window.print(), 50); };
+$('#reload').onclick = async () => {
+  if (ADMIN && JSON.stringify(S) !== BASE) { toast('未確定の変更があります。確定するか「1つ戻す」で戻してから最新にしてください'); return; }
+  if (await loadBoard(false)) toast('最新にしました');
+};
+$('#logout').onclick = async () => { await api({ action: 'logout', token: lsGet(LS.token) }); lsSet(LS.token, null); S = null; showLogin(''); };
+$('#weekview').addEventListener('click', (e) => { const g = e.target.closest('[data-go]'); if (!g) return; cur = g.dataset.go; view = 'board'; pick = null; render(); $('#boardwrap').scrollIntoView({ block: 'start' }); });
+$('#copyPrev').onclick = () => {
+  const p = ds(addDays(parse(cur), -7)), src = S.days[p];
+  if (!src || (!src.staff && !src.lanes)) { toast(`${md(p)}に列と担当の記録がありません`); return; }
+  snap(); const day = dayObj(cur, true); if (src.lanes) day.lanes = src.lanes.slice(); if (src.staff) day.staff = { ...src.staff }; render(); toast(`${md(p)}の列と担当を写しました`);
+};
+
+(async function boot() {
+  if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+    await new Promise((res) => { const s = document.createElement('script'); s.src = 'mock.js'; s.onload = res; s.onerror = res; document.head.appendChild(s); });
+  }
+  if (!lsGet(LS.token)) { showLogin(''); return; }
+  await loadBoard(true);
+})();
+</script>
+</body>
+</html>
